@@ -1,103 +1,254 @@
-import Image from "next/image";
+"use client"
+
+import type React from "react"
+
+import { useState, useRef, useEffect } from "react"
+import { Mic, Plus, Send } from "lucide-react"
+import Link from "next/link"
+
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+
+type Message = {
+  id: string
+  content: string
+  sender: "user" | "bot"
+  timestamp: string
+}
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [messages, setMessages] = useState<Message[]>([])
+  const [inputMessage, setInputMessage] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  // Fetch initial messages
+  useEffect(() => {
+    const fetchMessages = async () => {
+      try {
+        const response = await fetch("/api/chat")
+        if (!response.ok) {
+          throw new Error("Failed to fetch messages")
+        }
+        const data = await response.json()
+        setMessages(data)
+      } catch (error) {
+        console.error("Error fetching messages:", error)
+      }
+    }
+
+    fetchMessages()
+  }, [])
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages])
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!inputMessage.trim()) return
+
+    // Optimistically add user message to UI
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      content: inputMessage,
+      sender: "user",
+      timestamp: new Date().toISOString(),
+    }
+
+    setMessages((prev) => [...prev, userMessage])
+    setInputMessage("")
+    setIsLoading(true)
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ message: inputMessage }),
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to send message")
+      }
+
+      const data = await response.json()
+
+      // Add bot response to UI
+      const botMessage: Message = {
+        id: Date.now().toString(),
+        content: data.reply,
+        sender: "bot",
+        timestamp: new Date().toISOString(),
+      }
+
+      setMessages((prev) => [...prev, botMessage])
+    } catch (error) {
+      console.error("Error sending message:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-1 flex-col w-full max-w-3xl mx-auto">
+      {messages.length === 0 ? (
+        <div className="flex flex-col items-center justify-center flex-1">
+          <h1 className="text-4xl font-medium text-neutral-800 text-center">Hey, ¡Compremos un carro!</h1>
+
+          <div className="mt-8 w-full max-w-xl">
+            <Card className="relative overflow-hidden border border-neutral-200 shadow-conversation">
+              <form onSubmit={handleSendMessage} className="flex items-center gap-2 p-4">
+                <Input
+                  className="flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+                  placeholder="Escribe a Trekko"
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  disabled={isLoading}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full shadow-soft-sm shadow-soft-hover"
+                  disabled={isLoading}
+                >
+                  <Plus className="h-5 w-5" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full shadow-soft-sm shadow-soft-hover"
+                  disabled={isLoading}
+                >
+                  <Mic className="h-5 w-5" />
+                </Button>
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full shadow-soft-sm shadow-soft-hover"
+                  disabled={isLoading || !inputMessage.trim()}
+                >
+                  <Send className="h-5 w-5" />
+                </Button>
+              </form>
+            </Card>
+          </div>
+
+          <div className="mt-8 flex flex-wrap justify-center gap-2">
+            <SuggestionButton onClick={() => setInputMessage("¿Qué es Trekko?")}>¿Qué es Trekko?</SuggestionButton>
+            <SuggestionButton onClick={() => setInputMessage("Marchamo")}>Marchamo</SuggestionButton>
+            <SuggestionButton onClick={() => setInputMessage("¿Electrico o Gasolina?")}>
+              ¿Electrico o Gasolina?
+            </SuggestionButton>
+            <SuggestionButton onClick={() => setInputMessage("Financiamiento")}>Financiamiento</SuggestionButton>
+          </div>
+          <div className="mt-2 flex flex-wrap justify-center gap-2">
+            <SuggestionButton onClick={() => setInputMessage("Ayudame a decidir entre nuevo o usado")}>
+              Ayudame a decidir entre nuevo o usado
+            </SuggestionButton>
+            <SuggestionButton onClick={() => setInputMessage("¿Cuanto cuesta el traspaso?")}>
+              ¿Cuanto cuesta el traspaso?
+            </SuggestionButton>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+      ) : (
+        <div className="flex-1 overflow-y-auto py-4 space-y-4">
+          {messages.map((message) => (
+            <div key={message.id} className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"}`}>
+              <div
+                className={`max-w-[80%] rounded-2xl px-4 py-2 ${
+                  message.sender === "user" ? "bg-neutral-800 text-white" : "bg-neutral-100 text-neutral-800"
+                }`}
+              >
+                <p>{message.content}</p>
+              </div>
+            </div>
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
+      )}
+
+      {messages.length > 0 && (
+        <div className="mt-4 w-full">
+          <Card className="relative overflow-hidden border border-neutral-200 shadow-conversation">
+            <form onSubmit={handleSendMessage} className="flex items-center gap-2 p-4">
+              <Input
+                className="flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+                placeholder="Escribe a Trekko"
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                disabled={isLoading}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="rounded-full shadow-soft-sm shadow-soft-hover"
+                disabled={isLoading}
+              >
+                <Plus className="h-5 w-5" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="rounded-full shadow-soft-sm shadow-soft-hover"
+                disabled={isLoading}
+              >
+                <Mic className="h-5 w-5" />
+              </Button>
+              <Button
+                type="submit"
+                variant="ghost"
+                size="icon"
+                className="rounded-full shadow-soft-sm shadow-soft-hover"
+                disabled={isLoading || !inputMessage.trim()}
+              >
+                <Send className="h-5 w-5" />
+              </Button>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      <footer className="mt-4 w-full text-center text-xs text-neutral-500">
+        <p>
+          Trekko puede cometer errores. Al interactuar con Trekko aceptas los{" "}
+          <Link href="#" className="underline">
+            Términos y Condiciones
+          </Link>
+          . Consulta nuestra{" "}
+          <Link href="#" className="underline">
+            Politica de privacidad
+          </Link>
+          .
+        </p>
       </footer>
     </div>
-  );
+  )
+}
+
+function SuggestionButton({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode
+  onClick?: () => void
+}) {
+  return (
+    <Button
+      variant="outline"
+      className="h-auto rounded-full border-neutral-200 px-4 py-2 text-sm font-normal shadow-soft-sm shadow-soft-hover"
+      onClick={onClick}
+    >
+      {children}
+    </Button>
+  )
 }
