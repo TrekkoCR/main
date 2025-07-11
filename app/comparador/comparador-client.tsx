@@ -2,8 +2,8 @@
 
 import dynamic from "next/dynamic"
 
+// Importar el componente de forma dinámica para evitar problemas de hidratación
 const OptimizedComparadorPage = dynamic(() => import("./optimized-page"), {
-  loading: () => <div>Cargando comparador...</div>,
   ssr: false,
 })
 
