@@ -2,9 +2,11 @@
 
 import type React from "react"
 import "./globals.css"
+import { QueryStatus } from "@/components/ui/query-status"
+import { NotificationsContainer } from "@/components/ui/notifications"
 
 import { useEffect, useState } from "react"
-import { ChevronLeft, LogOut, Menu, MessageCircle, Settings, User } from "lucide-react"
+import { ChevronLeft, LogOut, MessageCircle, Settings, User, Menu } from "lucide-react"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
@@ -31,6 +33,9 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { AuthProvider, useAuth } from "@/contexts/auth-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+// Removed: import { ThemeToggle } from "@/components/theme-toggle"
+import { QueryProvider } from "@/lib/providers/query-provider"
+import { getFriendlyErrorMessage } from "@/lib/errors"
 
 export default function ClientLayout({
   children,
@@ -41,9 +46,13 @@ export default function ClientLayout({
     <html lang="en">
       <body className="flex h-screen w-full overflow-hidden bg-white">
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
-          <AuthProvider>
-            <ClientLayoutContent>{children}</ClientLayoutContent>
-          </AuthProvider>
+          <QueryProvider>
+            <AuthProvider>
+              <ClientLayoutContent>{children}</ClientLayoutContent>
+              <NotificationsContainer />
+              <QueryStatus />
+            </AuthProvider>
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>
@@ -54,9 +63,10 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [authDialogOpen, setAuthDialogOpen] = useState(false)
   const [authMode, setAuthMode] = useState<"login" | "register">("login")
+  const [authDialogMessage, setAuthDialogMessage] = useState<string | undefined>(undefined)
   const pathname = usePathname()
 
-  const { user, userRole, isLoading, signIn, signUp, signOut } = useAuth()
+  const { user, userRole, isLoading, signIn, signUp, signOut, authError, clearAuthError } = useAuth()
   const isAuthenticated = !!user
 
   // Close sidebar when window resizes to desktop
@@ -64,6 +74,8 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
     const handleResize = () => {
       if (window.innerWidth >= 768) {
         setSidebarOpen(false)
+        // Dispatch sidebar closed event
+        document.dispatchEvent(new CustomEvent("sidebar-closed"))
       }
     }
 
@@ -74,7 +86,15 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
   // Listen for custom sidebar toggle event
   useEffect(() => {
     const handleToggleSidebar = () => {
-      setSidebarOpen(true)
+      const newState = !sidebarOpen
+      setSidebarOpen(newState)
+
+      // Dispatch sidebar state events
+      if (newState) {
+        document.dispatchEvent(new CustomEvent("sidebar-opened"))
+      } else {
+        document.dispatchEvent(new CustomEvent("sidebar-closed"))
+      }
     }
 
     document.addEventListener("toggle-sidebar", handleToggleSidebar)
@@ -82,10 +102,27 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
     return () => {
       document.removeEventListener("toggle-sidebar", handleToggleSidebar)
     }
-  }, [])
+  }, [sidebarOpen])
+
+  useEffect(() => {
+    if (authError && !authDialogOpen) {
+      // Open dialog only if not already open due to authError
+      setAuthDialogMessage(authError.message)
+      setAuthMode("login")
+      setAuthDialogOpen(true)
+    }
+  }, [authError, authDialogOpen])
 
   const toggleSidebar = () => {
-    setSidebarOpen(!sidebarOpen)
+    const newState = !sidebarOpen
+    setSidebarOpen(newState)
+
+    // Dispatch sidebar state events
+    if (newState) {
+      document.dispatchEvent(new CustomEvent("sidebar-opened"))
+    } else {
+      document.dispatchEvent(new CustomEvent("sidebar-closed"))
+    }
   }
 
   const startNewChat = () => {
@@ -93,12 +130,15 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
     window.location.href = "/"
   }
 
+  const closeSidebar = () => {
+    setSidebarOpen(false)
+    document.dispatchEvent(new CustomEvent("sidebar-closed"))
+  }
+
   return (
     <>
       {/* Mobile sidebar overlay */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={() => setSidebarOpen(false)} />
-      )}
+      {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={closeSidebar} />}
 
       {/* Mobile sidebar */}
       <div
@@ -107,7 +147,7 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
         }`}
       >
         <MobileSidebar
-          onClose={() => setSidebarOpen(false)}
+          onClose={closeSidebar}
           onNewChat={startNewChat}
           isAuthenticated={isAuthenticated}
           user={user}
@@ -139,25 +179,56 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
         />
       </div>
 
-      <main className="flex flex-1 flex-col">
-        <header className="flex h-16 items-center px-6">
-          {/* Hamburger menu for mobile */}
-          <Button variant="ghost" size="icon" className="md:hidden" onClick={toggleSidebar} aria-label="Menu">
-            <Menu className="h-5 w-5" />
-          </Button>
-        </header>
+      {/* Hamburger menu button - visible only when sidebar is closed */}
+      {!sidebarOpen && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="md:hidden fixed top-4 left-4 z-50 bg-white shadow-md"
+          onClick={toggleSidebar}
+          aria-label="Menu"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+      )}
 
-        <div className="flex flex-1 flex-col px-4 pb-4 overflow-y-auto">{children}</div>
+      <main className="flex flex-1 flex-col">
+        {/* Removed header as per previous request */}
+        <div className="flex flex-1 flex-col px-4 pt-16 pb-4 overflow-y-auto">{children}</div>
       </main>
 
       {/* Auth Dialog */}
       <AuthDialog
         open={authDialogOpen}
-        onOpenChange={setAuthDialogOpen}
+        onOpenChange={(isOpen) => {
+          setAuthDialogOpen(isOpen)
+          if (!isOpen) {
+            // If dialog is closed
+            if (authError) clearAuthError() // Clear the error if it was an auth error dialog
+            setAuthDialogMessage(undefined) // Reset message
+          }
+        }}
         mode={authMode}
         onModeChange={setAuthMode}
-        onSignIn={signIn}
-        onSignUp={signUp}
+        onSignIn={async (email, password) => {
+          const result = await signIn(email, password)
+          if (!result.error) {
+            setAuthDialogOpen(false) // Close on success
+            clearAuthError()
+            setAuthDialogMessage(undefined)
+          }
+          return result
+        }}
+        onSignUp={async (email, password) => {
+          const result = await signUp(email, password)
+          if (!result.error) {
+            setAuthDialogOpen(false) // Close on success
+            clearAuthError()
+            setAuthDialogMessage(undefined)
+          }
+          return result
+        }}
+        dialogMessageOverride={authDialogMessage}
       />
     </>
   )
@@ -170,6 +241,7 @@ function AuthDialog({
   onModeChange,
   onSignIn,
   onSignUp,
+  dialogMessageOverride, // New prop
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -177,6 +249,7 @@ function AuthDialog({
   onModeChange: (mode: "login" | "register") => void
   onSignIn: (email: string, password: string) => Promise<{ error: any }>
   onSignUp: (email: string, password: string) => Promise<{ error: any }>
+  dialogMessageOverride?: string // New prop
 }) {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -204,7 +277,7 @@ function AuthDialog({
       setPassword("")
       setName("")
     } catch (err: any) {
-      setError(err.message || "An error occurred during authentication")
+      setError(getFriendlyErrorMessage(err)) // MODIFICADO
     } finally {
       setIsLoading(false)
     }
@@ -216,9 +289,10 @@ function AuthDialog({
         <DialogHeader>
           <DialogTitle>{mode === "login" ? "Iniciar sesión" : "Registrarse"}</DialogTitle>
           <DialogDescription>
-            {mode === "login"
-              ? "Ingresa tus credenciales para acceder a tu cuenta."
-              : "Crea una nueva cuenta para guardar tus conversaciones."}
+            {dialogMessageOverride ||
+              (mode === "login"
+                ? "Ingresa tus credenciales para acceder a tu cuenta."
+                : "Crea una nueva cuenta para guardar tus conversaciones.")}
           </DialogDescription>
         </DialogHeader>
         {error && (
@@ -312,31 +386,14 @@ function MobileSidebar({
   return (
     <div className="h-full w-full bg-neutral-50 flex flex-col">
       <div className="flex justify-between items-center p-4 mb-2">
-        <div className="relative w-[40px] h-[40px]">
-          <Image
-            src="/placeholder.svg?height=40&width=40&text=AI"
-            alt="Trekko AI Bot"
-            fill
-            className="object-contain rounded-full"
-            priority
-          />
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-neutral-200 rounded-md flex items-center justify-center">
+            <span className="text-xs text-neutral-500">Logo</span>
+          </div>
+          <span className="text-lg font-medium text-neutral-900">Trekko CR</span>
         </div>
         <Button variant="ghost" size="icon" onClick={onClose}>
           <ChevronLeft className="h-5 w-5" />
-        </Button>
-      </div>
-
-      <div className="px-2 mb-4">
-        <Button
-          onClick={() => {
-            onNewChat()
-            onClose()
-          }}
-          variant="ghost"
-          size="icon"
-          className="h-10 w-10 rounded-full bg-white border border-neutral-200 hover:bg-neutral-100 text-neutral-800 shadow-soft-sm"
-        >
-          <MessageCircle className="h-5 w-5" />
         </Button>
       </div>
 
@@ -364,9 +421,22 @@ function MobileSidebar({
         />
       </div>
       <Separator className="my-2" />
+      <Button
+        onClick={() => {
+          onNewChat()
+          onClose()
+        }}
+        variant="ghost"
+        className="w-full justify-start gap-3 h-10 p-2 text-neutral-800 hover:bg-white/80 hover:shadow-soft-sm mb-3"
+      >
+        <div className="flex h-8 w-8 items-center justify-center">
+          <MessageCircle className="h-4 w-4" style={{ color: "#1da1f2" }} />
+        </div>
+        <span className="text-sm font-medium">Nuevo Chat</span>
+      </Button>
       <div className="px-4 py-2">
-        <h2 className="text-sm font-medium text-neutral-900">Conversaciones</h2>
-        <p className="mt-2 text-xs text-neutral-500">
+        <h2 className="text-sm font-medium text-neutral-900 mb-3">Conversaciones</h2>
+        <p className="text-xs text-neutral-500">
           Las conversaciones con Trekko se mostrarán acá.
           {!isAuthenticated && " Registrate para mantener tus conversaciones."}
         </p>
@@ -413,29 +483,12 @@ function DesktopSidebar({
 }) {
   return (
     <div className="h-full flex flex-col">
-      <div className="flex justify-center items-center p-4 mb-2">
-        <div className="relative w-[60px] h-[60px]">
-          <Image
-            src="/placeholder.svg?height=60&width=60&text=AI"
-            alt="Trekko AI Bot"
-            fill
-            className="object-contain rounded-full"
-            priority
-          />
+      <div className="flex items-center gap-3 p-4 mb-2">
+        <div className="w-9 h-9 bg-neutral-200 rounded-md flex items-center justify-center">
+          <span className="text-xs text-neutral-500">Logo</span>
         </div>
+        <span className="text-lg font-medium text-neutral-900">Trekko CR</span>
       </div>
-
-      <div className="px-2 mb-4">
-        <Button
-          onClick={onNewChat}
-          variant="ghost"
-          size="icon"
-          className="h-10 w-10 rounded-full bg-white border border-neutral-200 hover:bg-neutral-100 text-neutral-800 shadow-soft-sm"
-        >
-          <MessageCircle className="h-5 w-5" />
-        </Button>
-      </div>
-
       <div className="p-2 space-y-2">
         <SidebarItem
           icon={<ChatIcon />}
@@ -460,9 +513,19 @@ function DesktopSidebar({
         />
       </div>
       <Separator className="my-2" />
+      <Button
+        onClick={onNewChat}
+        variant="ghost"
+        className="w-full justify-start gap-3 h-10 p-2 text-neutral-800 hover:bg-white/80 hover:shadow-soft-sm mb-3"
+      >
+        <div className="flex h-8 w-8 items-center justify-center">
+          <MessageCircle className="h-4 w-4" style={{ color: "#1da1f2" }} />
+        </div>
+        <span className="text-sm font-medium">Nuevo Chat</span>
+      </Button>
       <div className="px-4 py-2">
-        <h2 className="text-sm font-medium text-neutral-900">Conversaciones</h2>
-        <p className="mt-2 text-xs text-neutral-500">
+        <h2 className="text-sm font-medium text-neutral-900 mb-3">Conversaciones</h2>
+        <p className="text-xs text-neutral-500">
           Las conversaciones con Trekko se mostrarán acá.
           {!isAuthenticated && " Registrate para mantener tus conversaciones."}
         </p>
@@ -561,7 +624,7 @@ function SidebarItem({
         active ? "bg-white shadow-soft-sm" : "hover:bg-white/80 hover:shadow-soft-sm shadow-soft-hover"
       }`}
     >
-      <div className="flex h-8 w-8 items-center justify-center rounded-md bg-orange-100">{icon}</div>
+      <div className="flex h-8 w-8 items-center justify-center rounded-md">{icon}</div>
       <div className="flex flex-col">
         <span className="text-sm font-medium">{title}</span>
         <span className="text-xs text-neutral-500">{subtitle}</span>
@@ -585,7 +648,7 @@ function ChatIcon() {
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path
         d="M2 3.5C2 2.67157 2.67157 2 3.5 2H12.5C13.3284 2 14 2.67157 14 3.5V10.5C14 11.3284 13.3284 12 12.5 12H9L6 14.5V12H3.5C2.67157 12 2 11.3284 2 10.5V3.5Z"
-        stroke="#C25E56"
+        stroke="#1da1f2"
         strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -599,18 +662,18 @@ function CalculatorIcon() {
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path
         d="M12.5 2H3.5C2.67157 2 2 2.67157 2 3.5V12.5C2 13.3284 2.67157 14 3.5 14H12.5C13.3284 14 14 13.3284 14 12.5V3.5C14 2.67157 13.3284 2 12.5 2Z"
-        stroke="#C25E56"
+        stroke="#1da1f2"
         strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <path d="M5 5H11" stroke="#C25E56" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M5 8H5.01" stroke="#C25E56" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M8 8H8.01" stroke="#C25E56" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M11 8H11.01" stroke="#C25E56" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M5 11H5.01" stroke="#C25E56" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M8 11H8.01" stroke="#C25E56" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M11 11H11.01" stroke="#C25E56" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5 5H11" stroke="#1da1f2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5 8H5.01" stroke="#1da1f2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 8H8.01" stroke="#1da1f2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M11 8H11.01" stroke="#1da1f2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5 11H5.01" stroke="#1da1f2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 11H8.01" stroke="#1da1f2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M11 11H11.01" stroke="#1da1f2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
@@ -620,7 +683,7 @@ function VehicleIcon() {
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path
         d="M2.5 10.5H13.5M3.5 13.5H4.5M11.5 13.5H12.5M4 7.5L5.5 3.5H10.5L12 7.5M3.5 10.5C3.5 11.6046 2.60457 12.5 1.5 12.5V10.5C1.5 9.39543 2.39543 8.5 3.5 8.5H12.5C13.6046 8.5 14.5 9.39543 14.5 10.5V12.5C13.3954 12.5 12.5 11.6046 12.5 10.5"
-        stroke="#C25E56"
+        stroke="#1da1f2"
         strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
