@@ -1,597 +1,252 @@
 "use client"
 
-import React from "react"
-import { Suspense } from "react"
-import { HeroSection } from "@/components/home/hero-section"
-import { FeaturesSection } from "@/components/home/features-section"
-import { CTASection } from "@/components/home/cta-section"
-import { LoadingSpinner } from "@/components/ui/loading-spinner"
+import type React from "react"
 
-import type { ReactNode } from "react"
-import { useState, useRef, useEffect, useCallback, useMemo } from "react"
-import { Mic, Paperclip, Send, Loader2, Car, FileText, Settings2, BadgeCent } from "lucide-react"
-import Link from "next/link"
-import dynamic from "next/dynamic"
-
+import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { logger } from "@/lib/logger"
-import { debounce, PerformanceMonitor } from "@/lib/performance-utils"
-import { useOptimizedState } from "@/hooks/use-optimized-state"
-import { apiCache } from "@/lib/api-cache"
-import { MemoizedMessageItem } from "@/components/optimized/memo-components"
+import { Textarea } from "@/components/ui/textarea"
+import { Send, Loader2 } from "lucide-react"
+import { MarkdownRenderer } from "@/components/ui/markdown-renderer"
 
-// Lazy load heavy components
-const LazyMarkdownRenderer = dynamic(() => import("@/components/ui/markdown-renderer"), {
-  loading: () => <div className="animate-pulse h-4 bg-gray-200 rounded"></div>,
-})
-
-type Message = {
+interface Message {
   id: string
+  role: "user" | "assistant"
   content: string
-  sender: "user" | "bot"
-  timestamp: string
+  timestamp: Date
 }
-
-interface ChatInputBarProps {
-  inputMessage: string
-  onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-  onSubmit: (e: React.FormEvent) => void
-  isLoading: boolean
-  specialtyMenuOpen: boolean
-  setSpecialtyMenuOpen: (open: boolean) => void
-  selectedSpecialty: string | null
-  onSpecialtySelect: (specialty: string) => void
-  specialtyOptions: Array<{ id: string; label: string; icon: any }>
-  micTooltipVisible: boolean
-  onMicClick: () => void
-  specialtyMenuRef: React.RefObject<HTMLDivElement>
-}
-
-// Memoized ChatInputBar to prevent unnecessary re-renders
-const ChatInputBar = React.memo(
-  ({
-    inputMessage,
-    onInputChange,
-    onSubmit,
-    isLoading,
-    specialtyMenuOpen,
-    setSpecialtyMenuOpen,
-    selectedSpecialty,
-    onSpecialtySelect,
-    specialtyOptions,
-    micTooltipVisible,
-    onMicClick,
-    specialtyMenuRef,
-  }: ChatInputBarProps) => {
-    return (
-      <div className="relative w-full max-w-2xl mx-auto px-2 sm:px-0" ref={specialtyMenuRef}>
-        <Card
-          className="relative overflow-visible border border-neutral-200 shadow-lg bg-white rounded-[18px]"
-          style={{ boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
-        >
-          <form onSubmit={onSubmit} className="flex flex-col gap-3 px-3 sm:px-4 py-3 sm:py-4">
-            <input
-              className="w-full bg-transparent text-gray-700 placeholder:text-gray-400 outline-none border-none focus:outline-none focus:ring-0 focus:border-none appearance-none text-sm sm:text-base"
-              placeholder="Escribe a Trekko"
-              value={inputMessage}
-              onChange={onInputChange}
-              disabled={isLoading}
-              autoComplete="off"
-              style={{
-                border: "none",
-                outline: "none",
-                boxShadow: "none",
-                WebkitAppearance: "none",
-                MozAppearance: "none",
-                appearance: "none",
-              }}
-            />
-
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1 sm:gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className={`rounded-full px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm font-medium transition-colors ${
-                    selectedSpecialty
-                      ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
-                      : "text-gray-600 hover:text-gray-800 hover:bg-gray-100"
-                  }`}
-                  onClick={() => setSpecialtyMenuOpen(!specialtyMenuOpen)}
-                  disabled={isLoading}
-                >
-                  <Settings2 className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                  Especialidad
-                </Button>
-              </div>
-
-              <div className="flex items-center gap-1 sm:gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-full h-7 w-7 sm:h-8 sm:w-8 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-                  disabled={isLoading}
-                >
-                  <Paperclip className="h-3 w-3 sm:h-4 sm:w-4" />
-                </Button>
-                <div className="relative">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="rounded-full h-7 w-7 sm:h-8 sm:w-8 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-                    disabled={isLoading}
-                    onClick={onMicClick}
-                  >
-                    <Mic className="h-3 w-3 sm:h-4 sm:w-4" />
-                  </Button>
-                  {micTooltipVisible && (
-                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded whitespace-nowrap z-50">
-                      Próximamente
-                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-2 border-r-2 border-t-2 border-transparent border-t-gray-800"></div>
-                    </div>
-                  )}
-                </div>
-                <Button
-                  type="submit"
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-full h-7 w-7 sm:h-8 sm:w-8 text-gray-500 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-50"
-                  disabled={isLoading || !inputMessage.trim()}
-                >
-                  <Send className="h-3 w-3 sm:h-4 sm:w-4" />
-                </Button>
-              </div>
-            </div>
-          </form>
-        </Card>
-
-        {specialtyMenuOpen && (
-          <div className="absolute top-full left-2 sm:left-0 right-2 sm:right-auto mt-2 sm:w-64 bg-white border border-gray-200 rounded-2xl shadow-xl z-50 overflow-hidden">
-            {specialtyOptions.map((option, index) => {
-              const IconComponent = option.icon
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  className={`w-full flex items-center gap-3 px-3 sm:px-4 py-3 text-left hover:bg-gray-50 transition-colors ${
-                    selectedSpecialty === option.id ? "bg-blue-50 text-blue-600" : "text-gray-700"
-                  } ${index === 0 ? "rounded-t-2xl" : ""} ${index === specialtyOptions.length - 1 ? "rounded-b-2xl" : ""}`}
-                  onClick={() => onSpecialtySelect(option.id)}
-                >
-                  <IconComponent className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
-                  <span className="text-sm font-medium">{option.label}</span>
-                  {selectedSpecialty === option.id && (
-                    <div className="ml-auto w-2 h-2 bg-blue-600 rounded-full flex-shrink-0" />
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        )}
-      </div>
-    )
-  },
-)
-
-ChatInputBar.displayName = "ChatInputBar"
-
-// Memoized SuggestionButton
-const SuggestionButton = React.memo(
-  ({
-    children,
-    onClick,
-  }: {
-    children: ReactNode
-    onClick?: () => void
-  }) => {
-    return (
-      <Button
-        variant="outline"
-        className="h-auto rounded-full border-neutral-200 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-normal shadow-soft-sm shadow-soft-hover bg-blue-100 text-blue-800 hover:bg-blue-200"
-        onClick={onClick}
-      >
-        {children}
-      </Button>
-    )
-  },
-)
-
-SuggestionButton.displayName = "SuggestionButton"
 
 export default function ClientHomePage() {
-  const [messages, setMessages] = useOptimizedState<Message[]>([])
-  const [inputMessage, setInputMessage] = useState("")
+  const [messages, setMessages] = useState<Message[]>([])
+  const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [specialtyMenuOpen, setSpecialtyMenuOpen] = useState(false)
-  const [selectedSpecialty, setSelectedSpecialty] = useState<string | null>(null)
-  const specialtyMenuRef = useRef<HTMLDivElement>(null)
-  const [micTooltipVisible, setMicTooltipVisible] = useState(false)
-  const abortControllerRef = useRef<AbortController | null>(null)
-  const performanceMonitor = PerformanceMonitor.getInstance()
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Memoized specialty options to prevent recreation
-  const specialtyOptions = useMemo(
-    () => [
-      { id: "financiamiento", label: "Financiamiento", icon: BadgeCent },
-      { id: "vehiculos", label: "Vehiculos", icon: Car },
-      { id: "legal", label: "Legal y Requisitos", icon: FileText },
-    ],
-    [],
-  )
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }
 
-  // Optimized fetch with caching and abort controller
-  const fetchMessages = useCallback(async () => {
-    const cacheKey = "initial-messages"
-    const cached = apiCache.get(cacheKey)
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages])
 
-    if (cached) {
-      setMessages(cached)
-      return
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!input.trim() || isLoading) return
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: input.trim(),
+      timestamp: new Date(),
+    }
+
+    setMessages((prev) => [...prev, userMessage])
+    setInput("")
+    setIsLoading(true)
+
+    const assistantMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      role: "assistant",
+      content: "",
+      timestamp: new Date(),
     }
 
     try {
-      performanceMonitor.startTimer("fetch-messages")
-
-      const controller = new AbortController()
-      abortControllerRef.current = controller
-
       const response = await fetch("/api/chat", {
-        signal: controller.signal,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: [...messages, userMessage].map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+          })),
+        }),
       })
 
       if (!response.ok) {
-        throw new Error("Failed to fetch messages")
+        throw new Error("Failed to get response")
       }
 
-      const data = await response.json()
-
-      if (Array.isArray(data)) {
-        setMessages(data)
-        apiCache.set(cacheKey, data, 60000) // Cache for 1 minute
-      } else {
-        logger.warn("API returned non-array data:", data)
-        setMessages([])
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error("No reader available")
       }
-    } catch (error: any) {
-      if (error.name !== "AbortError") {
-        logger.error("Error fetching messages:", error)
-        setMessages([])
-      }
-    } finally {
-      performanceMonitor.endTimer("fetch-messages")
-      abortControllerRef.current = null
-    }
-  }, [setMessages, performanceMonitor])
 
-  // Fetch initial messages
-  useEffect(() => {
-    fetchMessages()
+      setMessages((prev) => [...prev, assistantMessage])
 
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-      }
-    }
-  }, [fetchMessages])
+      const decoder = new TextDecoder()
+      let done = false
 
-  // Optimized scroll to bottom with intersection observer
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      const observer = new IntersectionObserver(
-        (entries) => {
-          const [entry] = entries
-          if (!entry.isIntersecting) {
-            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+      while (!done) {
+        const { value, done: readerDone } = await reader.read()
+        done = readerDone
+
+        if (value) {
+          const chunk = decoder.decode(value, { stream: true })
+          const lines = chunk.split("\n")
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const data = line.slice(6)
+              if (data === "[DONE]") {
+                done = true
+                break
+              }
+
+              try {
+                const parsed = JSON.parse(data)
+                if (parsed.choices?.[0]?.delta?.content) {
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === assistantMessage.id
+                        ? { ...msg, content: msg.content + parsed.choices[0].delta.content }
+                        : msg,
+                    ),
+                  )
+                }
+              } catch (e) {
+                // Ignore parsing errors for incomplete JSON
+              }
+            }
           }
-        },
-        { threshold: 0.1 },
+        }
+      }
+    } catch (error) {
+      console.error("Error:", error)
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantMessage.id
+            ? { ...msg, content: "Lo siento, ocurrió un error al procesar tu mensaje." }
+            : msg,
+        ),
       )
-
-      observer.observe(messagesEndRef.current)
-
-      return () => observer.disconnect()
+    } finally {
+      setIsLoading(false)
     }
-  }, [messages])
+  }
 
-  // Optimized click outside handler with event delegation
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (specialtyMenuRef.current && !specialtyMenuRef.current.contains(event.target as Node)) {
-        setSpecialtyMenuOpen(false)
-      }
-    }
-
-    if (specialtyMenuOpen) {
-      document.addEventListener("mousedown", handleClickOutside, { passive: true })
-      return () => document.removeEventListener("mousedown", handleClickOutside)
-    }
-  }, [specialtyMenuOpen])
-
-  // Debounced input change to prevent excessive re-renders
-  const debouncedInputChange = useMemo(
-    () =>
-      debounce((value: string) => {
-        // Any expensive operations based on input change
-      }, 300),
-    [],
-  )
-
-  const handleInputChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const value = e.target.value
-      setInputMessage(value)
-      debouncedInputChange(value)
-    },
-    [debouncedInputChange],
-  )
-
-  const handleSendMessage = useCallback(
-    async (e: React.FormEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-
-      if (!inputMessage.trim()) return
-
-      // Cancel any pending request
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-      }
-
-      performanceMonitor.startTimer("send-message")
-
-      const userMessage: Message = {
-        id: Date.now().toString(),
-        content: inputMessage,
-        sender: "user",
-        timestamp: new Date().toISOString(),
-      }
-
-      setMessages((prev) => {
-        const currentMessages = Array.isArray(prev) ? prev : []
-        return [...currentMessages, userMessage]
-      })
-
-      const currentInput = inputMessage
-      setInputMessage("")
-      setIsLoading(true)
-      setError(null)
-
-      try {
-        const controller = new AbortController()
-        abortControllerRef.current = controller
-
-        const response = await fetch("/api/chat", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ message: currentInput }),
-          signal: controller.signal,
-        })
-
-        if (!response.ok) {
-          throw new Error(`Error: ${response.status} ${response.statusText}`)
-        }
-
-        const data = await response.json()
-
-        const botMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          content: data.reply || "Lo siento, no pude procesar tu mensaje.",
-          sender: "bot",
-          timestamp: new Date().toISOString(),
-        }
-
-        setMessages((prev) => {
-          const currentMessages = Array.isArray(prev) ? prev : []
-          return [...currentMessages, botMessage]
-        })
-
-        // Clear cache after new message
-        apiCache.delete("initial-messages")
-      } catch (error: any) {
-        if (error.name !== "AbortError") {
-          logger.error("Error sending message:", error)
-          setError("No se pudo enviar el mensaje. Por favor, inténtalo de nuevo.")
-
-          const errorMessage: Message = {
-            id: (Date.now() + 1).toString(),
-            content: "Lo siento, ha ocurrido un error al procesar tu mensaje. Por favor, inténtalo de nuevo.",
-            sender: "bot",
-            timestamp: new Date().toISOString(),
-          }
-
-          setMessages((prev) => {
-            const currentMessages = Array.isArray(prev) ? prev : []
-            return [...currentMessages, errorMessage]
-          })
-        }
-      } finally {
-        setIsLoading(false)
-        performanceMonitor.endTimer("send-message")
-        abortControllerRef.current = null
-      }
-    },
-    [inputMessage, setMessages, performanceMonitor],
-  )
-
-  const handleSpecialtySelect = useCallback(
-    (specialty: string) => {
-      if (selectedSpecialty === specialty) {
-        setSelectedSpecialty(null)
-      } else {
-        setSelectedSpecialty(specialty)
-      }
-      setSpecialtyMenuOpen(false)
-    },
-    [selectedSpecialty],
-  )
-
-  const handleMicClick = useCallback(() => {
-    setMicTooltipVisible(true)
-    setTimeout(() => {
-      setMicTooltipVisible(false)
-    }, 3000)
-  }, [])
-
-  // Memoized suggestion handlers
-  const suggestionHandlers = useMemo(
-    () => ({
-      trekko: () => setInputMessage("¿Qué es Trekko?"),
-      marchamo: () => setInputMessage("Marchamo"),
-      electric: () => setInputMessage("¿Eléctrico o Gasolina?"),
-      financing: () => setInputMessage("Financiamiento"),
-      newUsed: () => setInputMessage("Ayúdame a decidir entre nuevo o usado"),
-      transfer: () => setInputMessage("¿Cuánto cuesta el traspaso?"),
-    }),
-    [],
-  )
-
-  const safeMessages = Array.isArray(messages) ? messages : []
-  const isChatMode = safeMessages.length > 0
+      handleSubmit(e as any)
+    }
+  }
 
   return (
-    <div className={`bg-white ${isChatMode ? "h-screen flex flex-col" : "min-h-screen"}`}>
-      {/* Chat Section - Conditional positioning */}
-      {!isChatMode ? (
-        // Landing page mode - chat at top
-        <section className="py-6 sm:py-8 lg:py-12 px-4 sm:px-6 bg-white">
-          <div className="max-w-4xl mx-auto">
-            <div className="text-center mb-6 sm:mb-8">
-              <h1 className="text-5xl font-bold text-neutral-800 mb-6 sm:mb-8 px-2">Hey, ¡Compremos un carro!</h1>
-
-              <ChatInputBar
-                inputMessage={inputMessage}
-                onInputChange={handleInputChange}
-                onSubmit={handleSendMessage}
-                isLoading={isLoading}
-                specialtyMenuOpen={specialtyMenuOpen}
-                setSpecialtyMenuOpen={setSpecialtyMenuOpen}
-                selectedSpecialty={selectedSpecialty}
-                onSpecialtySelect={handleSpecialtySelect}
-                specialtyOptions={specialtyOptions}
-                micTooltipVisible={micTooltipVisible}
-                onMicClick={handleMicClick}
-                specialtyMenuRef={specialtyMenuRef}
-              />
-
-              <div className="mt-6 sm:mt-8 flex flex-wrap justify-center gap-2 px-2">
-                <SuggestionButton onClick={suggestionHandlers.trekko}>¿Qué es Trekko?</SuggestionButton>
-                <SuggestionButton onClick={suggestionHandlers.marchamo}>Marchamo</SuggestionButton>
-                <SuggestionButton onClick={suggestionHandlers.electric}>¿Eléctrico o Gasolina?</SuggestionButton>
-                <SuggestionButton onClick={suggestionHandlers.financing}>Financiamiento</SuggestionButton>
-              </div>
-              <div className="mt-2 sm:mt-3 flex flex-wrap justify-center gap-2 px-2">
-                <SuggestionButton onClick={suggestionHandlers.newUsed}>
-                  <span className="hidden sm:inline">Ayúdame a decidir entre nuevo o usado</span>
-                  <span className="sm:hidden">Nuevo vs Usado</span>
-                </SuggestionButton>
-                <SuggestionButton onClick={suggestionHandlers.transfer}>
-                  <span className="hidden sm:inline">¿Cuánto cuesta el traspaso?</span>
-                  <span className="sm:hidden">Costo traspaso</span>
-                </SuggestionButton>
-              </div>
+    <div className="flex flex-col h-full max-w-4xl mx-auto">
+      {/* Messages Area - This should have the scroll */}
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
+        {messages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
+            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+              <span className="text-2xl">🚗</span>
             </div>
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-3 sm:px-4 py-2 sm:py-3 rounded-md mt-4 max-w-2xl mx-auto text-sm">
-                {error}
-              </div>
-            )}
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900 mb-2">¡Hola! Soy Trekko</h1>
+              <p className="text-gray-600 max-w-md">
+                Tu asistente personal para encontrar el auto perfecto. Puedo ayudarte con información sobre vehículos,
+                financiamiento y más.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl">
+              <Button
+                variant="outline"
+                className="text-left justify-start h-auto p-4 bg-transparent"
+                onClick={() => setInput("¿Qué autos me recomiendas para una familia?")}
+              >
+                <div>
+                  <div className="font-medium">Recomendaciones familiares</div>
+                  <div className="text-sm text-gray-500">Autos ideales para familias</div>
+                </div>
+              </Button>
+              <Button
+                variant="outline"
+                className="text-left justify-start h-auto p-4 bg-transparent"
+                onClick={() => setInput("¿Cuáles son las mejores opciones de financiamiento?")}
+              >
+                <div>
+                  <div className="font-medium">Opciones de financiamiento</div>
+                  <div className="text-sm text-gray-500">Encuentra la mejor opción para ti</div>
+                </div>
+              </Button>
+              <Button
+                variant="outline"
+                className="text-left justify-start h-auto p-4 bg-transparent"
+                onClick={() => setInput("Compara el Honda CR-V vs Toyota RAV4")}
+              >
+                <div>
+                  <div className="font-medium">Comparar vehículos</div>
+                  <div className="text-sm text-gray-500">Análisis detallado entre modelos</div>
+                </div>
+              </Button>
+              <Button
+                variant="outline"
+                className="text-left justify-start h-auto p-4 bg-transparent"
+                onClick={() => setInput("¿Qué debo considerar al comprar mi primer auto?")}
+              >
+                <div>
+                  <div className="font-medium">Primer auto</div>
+                  <div className="text-sm text-gray-500">Consejos para compradores nuevos</div>
+                </div>
+              </Button>
+            </div>
           </div>
-        </section>
-      ) : (
-        // Chat mode - messages in main area, input at bottom
-        <div className="flex flex-col h-full">
-          {/* Chat Messages */}
-          <section className="flex-1 py-6 sm:py-8 px-4 sm:px-6 overflow-y-auto">
-            <div className="space-y-4 sm:space-y-6 max-w-2xl mx-auto px-2">
-              {safeMessages.map((message) => (
-                <MemoizedMessageItem key={message.id} message={message} />
-              ))}
-
-              {isLoading && (
-                <div className="flex justify-start">
-                  <div className="max-w-[85%]">
-                    <div className="p-3 sm:p-4 bg-transparent">
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
-                        <span className="text-gray-600 text-sm">Trekko está pensando...</span>
-                      </div>
-                    </div>
+        ) : (
+          <>
+            {messages.map((message) => (
+              <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div
+                  className={`max-w-[80%] rounded-lg px-4 py-3 ${
+                    message.role === "user"
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-900 border border-gray-200"
+                  }`}
+                >
+                  {message.role === "assistant" ? (
+                    <MarkdownRenderer content={message.content} />
+                  ) : (
+                    <p className="whitespace-pre-wrap">{message.content}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+            {isLoading && (
+              <div className="flex justify-start">
+                <div className="bg-gray-100 text-gray-900 border border-gray-200 rounded-lg px-4 py-3">
+                  <div className="flex items-center space-x-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Trekko está escribiendo...</span>
                   </div>
                 </div>
-              )}
-
-              <div ref={messagesEndRef} />
-            </div>
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-3 sm:px-4 py-2 sm:py-3 rounded-md mt-4 max-w-2xl mx-auto text-sm">
-                {error}
               </div>
             )}
-          </section>
+            <div ref={messagesEndRef} />
+          </>
+        )}
+      </div>
 
-          {/* Chat Input at Bottom */}
-          <section className="bg-white py-4 px-4 sm:px-6">
-            <div className="max-w-2xl mx-auto">
-              <ChatInputBar
-                inputMessage={inputMessage}
-                onInputChange={handleInputChange}
-                onSubmit={handleSendMessage}
-                isLoading={isLoading}
-                specialtyMenuOpen={specialtyMenuOpen}
-                setSpecialtyMenuOpen={setSpecialtyMenuOpen}
-                selectedSpecialty={selectedSpecialty}
-                onSpecialtySelect={handleSpecialtySelect}
-                specialtyOptions={specialtyOptions}
-                micTooltipVisible={micTooltipVisible}
-                onMicClick={handleMicClick}
-                specialtyMenuRef={specialtyMenuRef}
-              />
-            </div>
-          </section>
-        </div>
-      )}
-
-      {/* Landing Page Content - Only show when not in chat mode */}
-      {!isChatMode && (
-        <>
-          <Suspense fallback={<LoadingSpinner />}>
-            <HeroSection />
-          </Suspense>
-
-          <Suspense fallback={<div className="h-64 sm:h-96 animate-pulse bg-gray-100" />}>
-            <FeaturesSection />
-          </Suspense>
-
-          <Suspense fallback={<div className="h-48 sm:h-64 animate-pulse bg-gray-50" />}>
-            <CTASection />
-          </Suspense>
-        </>
-      )}
-
-      {/* Footer - Only show when NOT in chat mode */}
-      {!isChatMode && (
-        <footer className="w-full text-center text-xs text-neutral-500 p-4 sm:p-6 bg-gray-50 border-t">
-          <p className="max-w-4xl mx-auto leading-relaxed">
-            Trekko puede cometer errores. Al interactuar con Trekko aceptas los{" "}
-            <Link href="#" className="underline hover:text-neutral-700">
-              Términos y Condiciones
-            </Link>
-            . Consulta nuestra{" "}
-            <Link href="#" className="underline hover:text-neutral-700">
-              Política de privacidad
-            </Link>
-            .
-          </p>
-        </footer>
-      )}
+      {/* Input Area - Fixed at bottom */}
+      <div className="border-t border-gray-200 bg-white p-4">
+        <form onSubmit={handleSubmit} className="flex space-x-2">
+          <div className="flex-1">
+            <Textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Escribe tu mensaje aquí..."
+              className="min-h-[60px] max-h-[120px] resize-none"
+              disabled={isLoading}
+            />
+          </div>
+          <Button type="submit" disabled={!input.trim() || isLoading} className="self-end">
+            <Send className="h-4 w-4" />
+          </Button>
+        </form>
+      </div>
     </div>
   )
 }
