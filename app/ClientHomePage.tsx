@@ -286,7 +286,7 @@ export default function ClientHomePage() {
         (entries) => {
           const [entry] = entries
           if (!entry.isIntersecting) {
-            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+            // Solo hacer scroll si realmente necesitamos
           }
         },
         { threshold: 0.1 },
