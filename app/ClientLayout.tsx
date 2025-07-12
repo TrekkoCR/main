@@ -192,7 +192,8 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
         </Button>
       )}
 
-      <main className="flex flex-1 flex-col overflow-hidden">
+      <main className="flex flex-1 flex-col">
+        {/* Removed header as per previous request */}
         <div className="flex flex-1 flex-col px-4 pt-16 pb-4">{children}</div>
       </main>
 
