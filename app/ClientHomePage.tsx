@@ -538,7 +538,7 @@ export default function ClientHomePage() {
           </section>
 
           {/* Chat Input at Bottom */}
-          <section className="fixed bottom-0 left-0 md:left-64 right-0 bg-white border-t border-gray-200 shadow-lg py-4 px-4 sm:px-6 z-20">
+          <section className="fixed bottom-0 left-0 md:left-64 right-0 bg-white shadow-lg py-4 px-4 sm:px-6 z-20">
             <div className="max-w-2xl mx-auto">
               <ChatInputBar
                 inputMessage={inputMessage}
