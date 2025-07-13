@@ -88,21 +88,26 @@ export default function FinancingCalculator() {
   }, [options, loanAmount, downPayment, loanTerm])
 
   return (
-    <ConsistentCard title="Calculadora de Cuota" shadow="md" compact={true} className="w-full">
+    <ConsistentCard
+      title="Calculadora de Cuota"
+      shadow="md"
+      compact={true}
+      className="w-full max-w-full overflow-hidden"
+    >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 md:gap-6">
-        <div className="space-y-4">
+        <div className="space-y-4 min-w-0">
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Typography variant="small" className="font-semibold text-gray-700 text-xs sm:text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <Typography variant="small" className="font-semibold text-gray-700 text-xs sm:text-sm flex-shrink-0">
                 Precio del Auto
               </Typography>
               {!isValidAmount && (
-                <Typography variant="small" className="text-red-500 text-xs">
-                  Rango: {loanCurrency === "CRC" ? "₡2M - ₡50M" : "$4K - $100K"}
+                <Typography variant="small" className="text-red-500 text-xs whitespace-nowrap">
+                  {loanCurrency === "CRC" ? "Rango: ₡2M-₡50M" : "Rango: $4K-$100K"}
                 </Typography>
               )}
             </div>
-            <div className="flex">
+            <div className="flex max-w-full">
               <ConsistentButton
                 variant="outline"
                 shadow="sm"
@@ -116,7 +121,7 @@ export default function FinancingCalculator() {
               <Input
                 id="loanAmount"
                 type="text"
-                className={`rounded-l-none flex-1 min-w-0 text-sm sm:text-base md:text-lg py-2 sm:py-3 px-2 sm:px-4 font-medium ${
+                className={`rounded-l-none flex-1 min-w-0 text-xs sm:text-sm md:text-base py-2 sm:py-3 px-2 sm:px-4 font-medium overflow-hidden text-ellipsis ${
                   !isValidAmount ? "border-red-300 focus:border-red-500" : ""
                 }`}
                 value={typeof loanAmount === "number" ? loanAmount.toLocaleString() : ""}
@@ -125,7 +130,7 @@ export default function FinancingCalculator() {
                   const numValue = value === "" ? 0 : Number(value)
                   setLoanAmount(isNaN(numValue) ? 0 : numValue)
                 }}
-                placeholder={loanCurrency === "CRC" ? "15,000,000" : "30,000"}
+                placeholder={loanCurrency === "CRC" ? "15M" : "30K"}
                 aria-label="Precio del auto"
               />
             </div>
@@ -156,7 +161,7 @@ export default function FinancingCalculator() {
           </div>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-3 min-w-0">
           <div className="space-y-2">
             <Typography variant="small" className="font-semibold text-gray-700 text-xs sm:text-sm">
               Plazo del Prestamo (1 - 10 años)
@@ -187,16 +192,14 @@ export default function FinancingCalculator() {
       <div className="mt-6 pt-4 border-t border-gray-100">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            {
-              isLoading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                  <Typography variant="small" className="text-gray-600">
-                    Calculando opciones...
-                  </Typography>
-                </>
-              ) : null /* Removed the Badge here */
-            }
+            {isLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                <Typography variant="small" className="text-gray-600">
+                  Calculando opciones...
+                </Typography>
+              </>
+            ) : null}
           </div>
         </div>
 
@@ -225,7 +228,7 @@ export default function FinancingCalculator() {
                   </Typography>
                 </div>
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <Typography variant="h6" className="font-bold text-green-900 text-sm sm:text-base break-all">
                       {loanCurrency === "CRC" ? "₡" : "$"}
                       {Math.round(option.estimatedPayment).toLocaleString()}/mes
@@ -234,7 +237,9 @@ export default function FinancingCalculator() {
                       {option.entity} • {option.interestRate}% anual
                     </Typography>
                   </div>
-                  <Badge className="bg-green-100 text-green-800 border-green-300">#{index + 1} Recomendado</Badge>
+                  <Badge className="bg-green-100 text-green-800 border-green-300 flex-shrink-0">
+                    #{index + 1} Recomendado
+                  </Badge>
                 </div>
               </div>
             ))}

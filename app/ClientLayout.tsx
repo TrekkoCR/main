@@ -1,19 +1,21 @@
 "use client"
 
+import { usePathname } from "next/navigation"
+
 import type React from "react"
 import "./globals.css"
 import { QueryStatus } from "@/components/ui/query-status"
 import { NotificationsContainer } from "@/components/ui/notifications"
+import { Sidebar } from "@/components/sidebar"
+import { useScreenSize } from "@/hooks/use-screen-size"
 
 import { useEffect, useState } from "react"
-import { ChevronLeft, LogOut, MessageCircle, Settings, User, Menu } from "lucide-react"
+import { LogOut, Settings, User } from "lucide-react"
 import Image from "next/image"
-import { usePathname } from "next/navigation"
 import Link from "next/link"
 
 import { ThemeProvider } from "@/components/theme-provider"
 import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,9 +33,8 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { AuthProvider, useAuth } from "@/contexts/auth-context"
+import { AuthProvider } from "@/contexts/auth-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-// Removed: import { ThemeToggle } from "@/components/theme-toggle"
 import { QueryProvider } from "@/lib/providers/query-provider"
 import { getFriendlyErrorMessage } from "@/lib/errors"
 
@@ -42,13 +43,60 @@ export default function ClientLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const pathname = usePathname()
+  const { isMobile } = useScreenSize()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Close sidebar on mobile when route changes
+  useEffect(() => {
+    if (isMobile) {
+      setSidebarOpen(false)
+    }
+  }, [pathname, isMobile])
+
+  // Close sidebar when clicking outside on mobile
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (isMobile && sidebarOpen) {
+        const sidebar = document.getElementById("sidebar")
+        const sidebarToggle = document.getElementById("sidebar-toggle")
+
+        if (
+          sidebar &&
+          !sidebar.contains(event.target as Node) &&
+          sidebarToggle &&
+          !sidebarToggle.contains(event.target as Node)
+        ) {
+          setSidebarOpen(false)
+        }
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [isMobile, sidebarOpen])
+
   return (
     <html lang="en">
       <body className="flex h-screen w-full overflow-hidden bg-white">
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <QueryProvider>
             <AuthProvider>
-              <ClientLayoutContent>{children}</ClientLayoutContent>
+              <div className="flex h-screen bg-background">
+                {/* Sidebar */}
+                <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} isMobile={isMobile} />
+
+                {/* Mobile overlay */}
+                {isMobile && sidebarOpen && (
+                  <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />
+                )}
+
+                {/* Main content */}
+                <main className="flex flex-1 flex-col">
+                  {/* Main content area with restored scroll */}
+                  <div className="flex flex-1 flex-col px-4 pt-16 pb-4 overflow-y-auto">{children}</div>
+                </main>
+              </div>
               <NotificationsContainer />
               <QueryStatus />
             </AuthProvider>
@@ -56,181 +104,6 @@ export default function ClientLayout({
         </ThemeProvider>
       </body>
     </html>
-  )
-}
-
-function ClientLayoutContent({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [authDialogOpen, setAuthDialogOpen] = useState(false)
-  const [authMode, setAuthMode] = useState<"login" | "register">("login")
-  const [authDialogMessage, setAuthDialogMessage] = useState<string | undefined>(undefined)
-  const pathname = usePathname()
-
-  const { user, userRole, isLoading, signIn, signUp, signOut, authError, clearAuthError } = useAuth()
-  const isAuthenticated = !!user
-
-  // Close sidebar when window resizes to desktop
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth >= 768) {
-        setSidebarOpen(false)
-        // Dispatch sidebar closed event
-        document.dispatchEvent(new CustomEvent("sidebar-closed"))
-      }
-    }
-
-    window.addEventListener("resize", handleResize)
-    return () => window.removeEventListener("resize", handleResize)
-  }, [])
-
-  // Listen for custom sidebar toggle event
-  useEffect(() => {
-    const handleToggleSidebar = () => {
-      const newState = !sidebarOpen
-      setSidebarOpen(newState)
-
-      // Dispatch sidebar state events
-      if (newState) {
-        document.dispatchEvent(new CustomEvent("sidebar-opened"))
-      } else {
-        document.dispatchEvent(new CustomEvent("sidebar-closed"))
-      }
-    }
-
-    document.addEventListener("toggle-sidebar", handleToggleSidebar)
-
-    return () => {
-      document.removeEventListener("toggle-sidebar", handleToggleSidebar)
-    }
-  }, [sidebarOpen])
-
-  useEffect(() => {
-    if (authError && !authDialogOpen) {
-      // Open dialog only if not already open due to authError
-      setAuthDialogMessage(authError.message)
-      setAuthMode("login")
-      setAuthDialogOpen(true)
-    }
-  }, [authError, authDialogOpen])
-
-  const toggleSidebar = () => {
-    const newState = !sidebarOpen
-    setSidebarOpen(newState)
-
-    // Dispatch sidebar state events
-    if (newState) {
-      document.dispatchEvent(new CustomEvent("sidebar-opened"))
-    } else {
-      document.dispatchEvent(new CustomEvent("sidebar-closed"))
-    }
-  }
-
-  const startNewChat = () => {
-    // Navigate to home to start a new chat
-    window.location.href = "/"
-  }
-
-  const closeSidebar = () => {
-    setSidebarOpen(false)
-    document.dispatchEvent(new CustomEvent("sidebar-closed"))
-  }
-
-  return (
-    <>
-      {/* Mobile sidebar overlay */}
-      {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={closeSidebar} />}
-
-      {/* Mobile sidebar */}
-      <div
-        className={`fixed inset-y-0 left-0 z-40 w-64 md:hidden transform transition-transform duration-200 ease-in-out ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <MobileSidebar
-          onClose={closeSidebar}
-          onNewChat={startNewChat}
-          isAuthenticated={isAuthenticated}
-          user={user}
-          userRole={userRole}
-          isLoading={isLoading}
-          onLogin={() => {
-            setAuthMode("login")
-            setAuthDialogOpen(true)
-          }}
-          onLogout={signOut}
-          pathname={pathname}
-        />
-      </div>
-
-      {/* Desktop sidebar */}
-      <div className="hidden md:block w-64 border-r border-neutral-200 bg-neutral-50">
-        <DesktopSidebar
-          onNewChat={startNewChat}
-          isAuthenticated={isAuthenticated}
-          user={user}
-          userRole={userRole}
-          isLoading={isLoading}
-          onLogin={() => {
-            setAuthMode("login")
-            setAuthDialogOpen(true)
-          }}
-          onLogout={signOut}
-          pathname={pathname}
-        />
-      </div>
-
-      {/* Hamburger menu button - visible only when sidebar is closed */}
-      {!sidebarOpen && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="md:hidden fixed top-4 left-4 z-50 bg-white shadow-md"
-          onClick={toggleSidebar}
-          aria-label="Menu"
-        >
-          <Menu className="h-5 w-5" />
-        </Button>
-      )}
-
-      <main className="flex flex-1 flex-col">
-        {/* Removed header as per previous request */}
-        <div className="flex flex-1 flex-col px-4 pt-16 pb-4 overflow-y-auto">{children}</div>
-      </main>
-
-      {/* Auth Dialog */}
-      <AuthDialog
-        open={authDialogOpen}
-        onOpenChange={(isOpen) => {
-          setAuthDialogOpen(isOpen)
-          if (!isOpen) {
-            // If dialog is closed
-            if (authError) clearAuthError() // Clear the error if it was an auth error dialog
-            setAuthDialogMessage(undefined) // Reset message
-          }
-        }}
-        mode={authMode}
-        onModeChange={setAuthMode}
-        onSignIn={async (email, password) => {
-          const result = await signIn(email, password)
-          if (!result.error) {
-            setAuthDialogOpen(false) // Close on success
-            clearAuthError()
-            setAuthDialogMessage(undefined)
-          }
-          return result
-        }}
-        onSignUp={async (email, password) => {
-          const result = await signUp(email, password)
-          if (!result.error) {
-            setAuthDialogOpen(false) // Close on success
-            clearAuthError()
-            setAuthDialogMessage(undefined)
-          }
-          return result
-        }}
-        dialogMessageOverride={authDialogMessage}
-      />
-    </>
   )
 }
 
@@ -359,192 +232,6 @@ function AuthDialog({
         </form>
       </DialogContent>
     </Dialog>
-  )
-}
-
-function MobileSidebar({
-  onClose,
-  onNewChat,
-  isAuthenticated,
-  user,
-  userRole,
-  isLoading,
-  onLogin,
-  onLogout,
-  pathname,
-}: {
-  onClose: () => void
-  onNewChat: () => void
-  isAuthenticated: boolean
-  user: any
-  userRole: string | null
-  isLoading: boolean
-  onLogin: () => void
-  onLogout: () => void
-  pathname: string
-}) {
-  return (
-    <div className="h-full w-full bg-neutral-50 flex flex-col">
-      <div className="flex justify-between items-center p-4 mb-2">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-neutral-200 rounded-md flex items-center justify-center">
-            <span className="text-xs text-neutral-500">Logo</span>
-          </div>
-          <span className="text-lg font-medium text-neutral-900">Trekko CR</span>
-        </div>
-        <Button variant="ghost" size="icon" onClick={onClose}>
-          <ChevronLeft className="h-5 w-5" />
-        </Button>
-      </div>
-
-      <div className="p-2 space-y-2">
-        <SidebarItem
-          icon={<ChatIcon />}
-          title="Chat"
-          subtitle="Tu asesor personal"
-          active={pathname === "/"}
-          href="/"
-        />
-        <SidebarItem
-          icon={<CalculatorIcon />}
-          title="Comparador"
-          subtitle="Opciones de Financiamiento"
-          href="/comparador"
-          active={pathname.includes("/comparador")}
-        />
-        <SidebarItem
-          icon={<VehicleIcon />}
-          title="Car Ranking"
-          subtitle="El auto perfecto"
-          href="/car-ranking"
-          active={pathname.includes("/car-ranking")}
-        />
-      </div>
-      <Separator className="my-2" />
-      <Button
-        onClick={() => {
-          onNewChat()
-          onClose()
-        }}
-        variant="ghost"
-        className="w-full justify-start gap-3 h-10 p-2 text-neutral-800 hover:bg-white/80 hover:shadow-soft-sm mb-3"
-      >
-        <div className="flex h-8 w-8 items-center justify-center">
-          <MessageCircle className="h-4 w-4" style={{ color: "#1da1f2" }} />
-        </div>
-        <span className="text-sm font-medium">Nuevo Chat</span>
-      </Button>
-      <div className="px-4 py-2">
-        <h2 className="text-sm font-medium text-neutral-900 mb-3">Conversaciones</h2>
-        <p className="text-xs text-neutral-500">
-          Las conversaciones con Trekko se mostrarán acá.
-          {!isAuthenticated && " Registrate para mantener tus conversaciones."}
-        </p>
-      </div>
-      <div className="mt-auto p-4">
-        {isLoading ? (
-          <div className="w-full text-center py-2 text-sm text-muted-foreground">Cargando...</div>
-        ) : isAuthenticated && user ? (
-          <UserProfileButton user={user} userRole={userRole} onLogout={onLogout} />
-        ) : (
-          <Button
-            onClick={() => {
-              onLogin()
-              onClose()
-            }}
-            className="w-full bg-neutral-800 hover:bg-neutral-700 shadow-soft-sm shadow-soft-hover"
-          >
-            Iniciar sesión
-          </Button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function DesktopSidebar({
-  onNewChat,
-  isAuthenticated,
-  user,
-  userRole,
-  isLoading,
-  onLogin,
-  onLogout,
-  pathname,
-}: {
-  onNewChat: () => void
-  isAuthenticated: boolean
-  user: any
-  userRole: string | null
-  isLoading: boolean
-  onLogin: () => void
-  onLogout: () => void
-  pathname: string
-}) {
-  return (
-    <div className="h-full flex flex-col">
-      <div className="flex items-center gap-3 p-4 mb-2">
-        <div className="w-9 h-9 bg-neutral-200 rounded-md flex items-center justify-center">
-          <span className="text-xs text-neutral-500">Logo</span>
-        </div>
-        <span className="text-lg font-medium text-neutral-900">Trekko CR</span>
-      </div>
-      <div className="p-2 space-y-2">
-        <SidebarItem
-          icon={<ChatIcon />}
-          title="Chat"
-          subtitle="Tu asesor personal"
-          active={pathname === "/"}
-          href="/"
-        />
-        <SidebarItem
-          icon={<CalculatorIcon />}
-          title="Comparador"
-          subtitle="Opciones de Financiamiento"
-          href="/comparador"
-          active={pathname.includes("/comparador")}
-        />
-        <SidebarItem
-          icon={<VehicleIcon />}
-          title="Car Ranking"
-          subtitle="El auto perfecto"
-          href="/car-ranking"
-          active={pathname.includes("/car-ranking")}
-        />
-      </div>
-      <Separator className="my-2" />
-      <Button
-        onClick={onNewChat}
-        variant="ghost"
-        className="w-full justify-start gap-3 h-10 p-2 text-neutral-800 hover:bg-white/80 hover:shadow-soft-sm mb-3"
-      >
-        <div className="flex h-8 w-8 items-center justify-center">
-          <MessageCircle className="h-4 w-4" style={{ color: "#1da1f2" }} />
-        </div>
-        <span className="text-sm font-medium">Nuevo Chat</span>
-      </Button>
-      <div className="px-4 py-2">
-        <h2 className="text-sm font-medium text-neutral-900 mb-3">Conversaciones</h2>
-        <p className="text-xs text-neutral-500">
-          Las conversaciones con Trekko se mostrarán acá.
-          {!isAuthenticated && " Registrate para mantener tus conversaciones."}
-        </p>
-      </div>
-      <div className="mt-auto p-4">
-        {isLoading ? (
-          <div className="w-full text-center py-2 text-sm text-muted-foreground">Cargando...</div>
-        ) : isAuthenticated && user ? (
-          <UserProfileButton user={user} userRole={userRole} onLogout={onLogout} />
-        ) : (
-          <Button
-            onClick={onLogin}
-            className="w-full bg-neutral-800 hover:bg-neutral-700 shadow-soft-sm shadow-soft-hover"
-          >
-            Iniciar sesión
-          </Button>
-        )}
-      </div>
-    </div>
   )
 }
 

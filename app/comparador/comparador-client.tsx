@@ -1,9 +1,11 @@
 "use client"
 
 import dynamic from "next/dynamic"
+import { FinancingTableSkeleton } from "@/components/ui/skeleton"
 
-// Importar el componente de forma dinámica para evitar problemas de hidratación
+// Dynamic import to avoid SSR issues and improve performance
 const OptimizedComparadorPage = dynamic(() => import("./optimized-page"), {
+  loading: () => <FinancingTableSkeleton />,
   ssr: false,
 })
 

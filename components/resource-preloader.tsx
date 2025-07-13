@@ -3,48 +3,40 @@
 import { useEffect } from "react"
 import { imageOptimizationService } from "@/lib/services/image-optimization-service"
 
-interface PreloadResource {
-  type: "image" | "script" | "style" | "font"
+interface Resource {
+  type: "image" | "font" | "script"
   url: string
-  options?: any
+  options?: {
+    width?: number
+    height?: number
+    quality?: number
+    format?: "webp" | "avif" | "auto"
+  }
 }
 
 interface ResourcePreloaderProps {
-  resources: PreloadResource[]
+  resources: Resource[]
 }
 
 export function ResourcePreloader({ resources }: ResourcePreloaderProps) {
   useEffect(() => {
+    // Only preload in browser environment
+    if (typeof window === "undefined") return
+
     resources.forEach((resource) => {
-      switch (resource.type) {
-        case "image":
-          imageOptimizationService.preloadImage(resource.url, resource.options)
-          break
-        case "script":
-          const script = document.createElement("link")
-          script.rel = "preload"
-          script.as = "script"
-          script.href = resource.url
-          document.head.appendChild(script)
-          break
-        case "style":
-          const style = document.createElement("link")
-          style.rel = "preload"
-          style.as = "style"
-          style.href = resource.url
-          document.head.appendChild(style)
-          break
-        case "font":
-          const font = document.createElement("link")
-          font.rel = "preload"
-          font.as = "font"
-          font.href = resource.url
-          font.crossOrigin = "anonymous"
-          document.head.appendChild(font)
-          break
+      try {
+        if (resource.type === "image") {
+          // Use placeholder.svg instead of external URLs to avoid blob errors
+          const imageUrl = resource.url.startsWith("/") ? resource.url : "/placeholder.svg?height=48&width=48"
+
+          imageOptimizationService.preloadImage(imageUrl, resource.options)
+        }
+      } catch (error) {
+        // Silently handle preload errors to avoid breaking the app
+        console.warn("Failed to preload resource:", resource.url, error)
       }
     })
   }, [resources])
 
-  return null
+  return null // This component doesn't render anything
 }

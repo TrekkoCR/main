@@ -63,8 +63,14 @@ export default function OptimizedComparadorPage() {
   const [selectedProduct, setSelectedProduct] = useState<any>(null)
   const [showProductDetail, setShowProductDetail] = useState<boolean>(false)
 
-  // Recursos críticos para precargar
-  const criticalResources = [{ type: "image" as const, url: "/placeholder.svg", options: { width: 48, height: 48 } }]
+  // Recursos críticos para precargar - usando placeholder.svg local
+  const criticalResources = [
+    {
+      type: "image" as const,
+      url: "/placeholder.svg",
+      options: { width: 48, height: 48 },
+    },
+  ]
 
   // Mostrar detalle del producto (memoizado)
   const handleShowProductDetail = useCallback((product: any) => {
@@ -110,8 +116,8 @@ export default function OptimizedComparadorPage() {
             Costa Rica.
           </p>
           <p className="text-muted-foreground mb-4">
-            Información actualizada mm/dd/aaaa. Los cálculos son estimaciones y pueden variar según las condiciones finales de cada
-            entidad.
+            Información actualizada mm/dd/aaaa. Los cálculos son estimaciones y pueden variar según las condiciones
+            finales de cada entidad.
           </p>
         </motion.div>
 
@@ -130,7 +136,7 @@ export default function OptimizedComparadorPage() {
           </TabsList>
 
           <AnimatePresence mode="wait">
-            <TabsContent value="comparar" className="space-y-6">
+            <TabsContent value="comparar" className="space-y-6 overflow-x-hidden">
               {/* Filtros */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -182,14 +188,14 @@ export default function OptimizedComparadorPage() {
               )}
             </TabsContent>
 
-            <TabsContent value="calcular" className="space-y-4 sm:space-y-6">
+            <TabsContent value="calcular" className="space-y-4 sm:space-y-6 overflow-x-hidden">
               {/* Calculadora */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
-                className="w-full"
+                className="w-full max-w-full overflow-x-hidden"
               >
                 <FinancingCalculator />
               </motion.div>
@@ -200,7 +206,7 @@ export default function OptimizedComparadorPage() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3, delay: 0.1 }}
-                className="w-full"
+                className="w-full max-w-full overflow-x-hidden"
               >
                 <FinancingResults onSelectOption={handleShowProductDetail} />
               </motion.div>
