@@ -97,8 +97,8 @@ export default function FinancingCalculator() {
                 Precio del Auto
               </Typography>
               {!isValidAmount && (
-                <Typography variant="small" className="text-red-500 text-xs">
-                  Rango: {loanCurrency === "CRC" ? "₡2M - ₡50M" : "$4K - $100K"}
+                <Typography variant="small" className="text-red-500 text-xs whitespace-nowrap">
+                  {loanCurrency === "CRC" ? "Rango: ₡2M-₡50M" : "Rango: $4K-$100K"}
                 </Typography>
               )}
             </div>
@@ -116,7 +116,7 @@ export default function FinancingCalculator() {
               <Input
                 id="loanAmount"
                 type="text"
-                className={`rounded-l-none flex-1 min-w-0 text-sm sm:text-base md:text-lg py-2 sm:py-3 px-2 sm:px-4 font-medium ${
+                className={`rounded-l-none flex-1 min-w-0 text-xs sm:text-sm md:text-base py-2 sm:py-3 px-2 sm:px-4 font-medium overflow-hidden text-ellipsis ${
                   !isValidAmount ? "border-red-300 focus:border-red-500" : ""
                 }`}
                 value={typeof loanAmount === "number" ? loanAmount.toLocaleString() : ""}
