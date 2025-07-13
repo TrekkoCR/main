@@ -508,7 +508,7 @@ export default function ClientHomePage() {
         // Chat mode - messages in main area, input at bottom
         <div className="flex flex-col h-full">
           {/* Chat Messages */}
-          <section className="flex-1 py-6 sm:py-8 px-4 sm:px-6 pb-64 overflow-y-auto">
+          <section className="flex-1 py-6 sm:py-8 px-4 sm:px-6 pb-48 sm:pb-52 overflow-y-auto">
             <div className="space-y-4 sm:space-y-6 max-w-2xl mx-auto px-2">
               {safeMessages.map((message) => (
                 <MemoizedMessageItem key={message.id} message={message} />
