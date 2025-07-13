@@ -194,7 +194,7 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
 
       <main className="flex flex-1 flex-col">
         {/* Removed header as per previous request */}
-        <div className="flex flex-1 flex-col px-4 pt-16 pb-4 overflow-y-auto">{children}</div>
+        <div className="flex flex-1 flex-col px-4 pt-16 pb-4">{children}</div>
       </main>
 
       {/* Auth Dialog */}
