@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/client"
+import { createClient } from "@/lib/supabase/client"
+import { createClient as createServerClient } from "@supabase/supabase-js"
 import type { Tables } from "@/lib/supabase/database.types"
 
 export type FinancingProduct = Tables<"finance_products">
@@ -70,7 +71,7 @@ function mapFinancingProduct(product: FinancingProduct, bankLogo?: string): Fina
     logo: bankLogo || `/placeholder.svg?height=40&width=40&text=${product.oferente?.substring(0, 3) || "EF"}`,
     product: product.nombre_del_producto || "Producto de Financiamiento",
     vehicleType,
-    currency: product.moneda_del_producto === "CRC" ? "CRC" : "USD",
+    currency: product.moneda_del_producto || "CRC",
     interestRate,
     rateType: product.tipo_tasa || "fija",
     maxTerm: product.plazo_en_meses || 60,
@@ -86,12 +87,33 @@ function mapFinancingProduct(product: FinancingProduct, bankLogo?: string): Fina
 }
 
 export class FinancingService {
-  private supabase = createClient()
+  // Usar createClient como método para obtener una instancia fresca de Supabase
+  private getSupabase = () => {
+    // Check if we're on the server side
+    if (typeof window === "undefined") {
+      // Server-side: use server client with service role key
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
 
-  async getFinancingOptions(filters: FinancingFilters = {}): Promise<FinancingOption[]> {
+      if (!supabaseUrl || !supabaseServiceKey) {
+        throw new Error("Missing Supabase server environment variables")
+      }
+
+      return createServerClient(supabaseUrl, supabaseServiceKey)
+    } else {
+      // Client-side: use the existing client
+      return createClient()
+    }
+  }
+
+  // Convertir el método a una función de flecha para mantener el contexto 'this'
+  getFinancingOptions = async (filters: FinancingFilters = {}): Promise<FinancingOption[]> => {
     try {
+      console.log("Fetching financing options from Supabase with filters:", filters)
+      const supabase = this.getSupabase()
+
       // Primero obtener todos los logos de bancos
-      const { data: banksData, error: banksError } = await this.supabase.from("bancos").select("id_oferente, logo_url")
+      const { data: banksData, error: banksError } = await supabase.from("bancos").select("id_oferente, logo_url")
 
       if (banksError) {
         console.error("Error fetching banks:", banksError)
@@ -108,9 +130,9 @@ export class FinancingService {
       }
 
       // Ahora obtener los productos de financiamiento
-      let query = this.supabase.from("finance_products").select("*")
+      let query = supabase.from("finance_products").select("*")
 
-      // Aplicar filtros
+      // Aplicar filtros en el servidor cuando sea posible
       if (filters.vehicleType && filters.vehicleType !== "todos") {
         if (filters.vehicleType === "nuevo") {
           query = query.not("tipo_de_bien", "ilike", "%usado%")
@@ -119,8 +141,11 @@ export class FinancingService {
         }
       }
 
+      // Corregir el filtro de moneda para asegurar que funcione correctamente
       if (filters.currency && filters.currency !== "todos") {
+        // Asegurarse de que estamos comparando con el valor correcto en la base de datos
         query = query.eq("moneda_del_producto", filters.currency)
+        console.log(`Filtering by currency: ${filters.currency}`)
       }
 
       if (filters.searchTerm) {
@@ -131,11 +156,18 @@ export class FinancingService {
 
       if (error) {
         console.error("Error fetching financing options:", error)
-        return []
+        return [] // Retornar array vacío en caso de error en lugar de datos dummy
       }
 
+      if (!data || data.length === 0) {
+        console.warn("No financing options found in Supabase")
+        return [] // Retornar array vacío si no hay datos en lugar de datos dummy
+      }
+
+      console.log(`Found ${data.length} financing options in Supabase`)
+
       // Mapear los datos combinando con los logos
-      let mappedData = (data || []).map((product) => {
+      let mappedData = data.map((product) => {
         const bankLogo = product.id_oferente ? bankLogos.get(product.id_oferente) : undefined
         return mapFinancingProduct(product, bankLogo)
       })
@@ -159,14 +191,16 @@ export class FinancingService {
       return mappedData
     } catch (error) {
       console.error("Error in getFinancingOptions:", error)
-      return []
+      return [] // Retornar array vacío en caso de error en lugar de datos dummy
     }
   }
 
-  async getFinancingOptionById(id: number): Promise<FinancingOption | null> {
+  getFinancingOptionById = async (id: number): Promise<FinancingOption | null> => {
     try {
+      const supabase = this.getSupabase()
+
       // Obtener el producto específico
-      const { data: productData, error: productError } = await this.supabase
+      const { data: productData, error: productError } = await supabase
         .from("finance_products")
         .select("*")
         .eq("id", id)
@@ -174,13 +208,13 @@ export class FinancingService {
 
       if (productError || !productData) {
         console.error("Error fetching financing option:", productError)
-        return null
+        return null // Retornar null en lugar de datos dummy
       }
 
       // Obtener el logo del banco si existe id_oferente
       let bankLogo: string | undefined
       if (productData.id_oferente) {
-        const { data: bankData, error: bankError } = await this.supabase
+        const { data: bankData, error: bankError } = await supabase
           .from("bancos")
           .select("logo_url")
           .eq("id_oferente", productData.id_oferente)
@@ -191,16 +225,19 @@ export class FinancingService {
         }
       }
 
-      return mapFinancingProduct(productData, bankLogo)
+      const mappedOption = mapFinancingProduct(productData, bankLogo)
+      return mappedOption
     } catch (error) {
       console.error("Error in getFinancingOptionById:", error)
-      return null
+      return null // Retornar null en lugar de datos dummy
     }
   }
 
-  async getUniqueValues() {
+  getUniqueValues = async () => {
     try {
-      const { data, error } = await this.supabase
+      const supabase = this.getSupabase()
+
+      const { data, error } = await supabase
         .from("finance_products")
         .select("oferente, moneda_del_producto, tipo_de_bien")
 

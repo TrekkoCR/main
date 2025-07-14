@@ -1,9 +1,8 @@
 "use client"
-
-import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { formatCurrency } from "@/lib/utils"
+import { OptimizedImage } from "@/components/ui/optimized-image"
 
 interface Car {
   id: string
@@ -36,11 +35,13 @@ export function CarCard({ car }: CarCardProps) {
       <CardContent className="p-0">
         <div className="flex">
           <div className="w-24 h-24 sm:w-32 sm:h-32 relative">
-            <Image
+            <OptimizedImage
               src={car.image || "/placeholder.svg"}
               alt={`${car.brand} ${car.model}`}
               fill
+              sizes="(max-width: 640px) 96px, 128px"
               className="object-cover"
+              containerClassName="w-full h-full"
             />
           </div>
           <div className="flex-1 p-4">
